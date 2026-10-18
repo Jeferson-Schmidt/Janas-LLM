@@ -1,0 +1,6 @@
+/bin/
+/downloads/
+/models/*
+!/models/.gitkeep
+/results/*.txt
+!/results/.gitkeep
