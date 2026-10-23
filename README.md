@@ -1,6 +1,6 @@
 # Janas LLM Hardware Test Bench
 
-Workspace independente para instalar e avaliar o projeto upstream [prabanta-dev/janas](https://github.com/prabanta-dev/janas) neste PC. Este diretório fica em `D:\Janas LLM` e não está vinculado ao Bookmak.
+Workspace independente para instalar e avaliar o projeto upstream [prabanta-dev/janas](https://github.com/prabanta-dev/janas) neste PC. 
 
 ## Hardware registrado
 
