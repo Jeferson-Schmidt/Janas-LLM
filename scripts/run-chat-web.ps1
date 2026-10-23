@@ -1,8 +1,8 @@
 param(
     [ValidateSet('qwen3.6-35b-a3b', 'qwen3-next-80b-a3b-q')]
     [string]$Model = 'qwen3.6-35b-a3b',
-    [ValidateSet(4096, 8192, 16384)]
-    [int]$Context = 8192,
+    [ValidateSet(4096, 8192, 16384, 65536)]
+    [int]$Context = 65536,
     [switch]$Gpu
 )
 
@@ -31,7 +31,8 @@ try {
         Remove-Item Env:JANAS_GPU -ErrorAction SilentlyContinue
         $env:JANAS_GPU_DEVICE = 'discrete'
         Write-Host 'GPU discreta habilitada; 8 GiB reservados; armazenamento de conversas desativado.'
-    } else {
+    }
+    else {
         $env:JANAS_GPU = '0'
         Remove-Item Env:JANAS_GPU_DEVICE -ErrorAction SilentlyContinue
         $serverArguments += '--no-gpu'
@@ -42,22 +43,26 @@ try {
     if ($LASTEXITCODE -ne 0) {
         throw "janas-server terminou com codigo $LASTEXITCODE."
     }
-} finally {
+}
+finally {
     if ($null -eq $previousModels) {
         Remove-Item Env:JANAS_MODELS -ErrorAction SilentlyContinue
-    } else {
+    }
+    else {
         $env:JANAS_MODELS = $previousModels
     }
 
     if ($null -eq $previousGpu) {
         Remove-Item Env:JANAS_GPU -ErrorAction SilentlyContinue
-    } else {
+    }
+    else {
         $env:JANAS_GPU = $previousGpu
     }
 
     if ($null -eq $previousGpuDevice) {
         Remove-Item Env:JANAS_GPU_DEVICE -ErrorAction SilentlyContinue
-    } else {
+    }
+    else {
         $env:JANAS_GPU_DEVICE = $previousGpuDevice
     }
 }
