@@ -6,3 +6,7 @@
 !/results/.gitkeep
 /cloudflared.exe
 /Agente/.venv/
+/AgenteV2/.venv/
+/AgenteV2/.token
+/AgenteV2/.stats.json
+__pycache__/

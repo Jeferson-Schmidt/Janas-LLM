@@ -69,19 +69,23 @@ Para baixar o Qwen3-Next-80B-A3B convertido (cerca de 49,4 GB) para o NVMe, exec
 .\bin\janas\janas-get.exe qwen3-next-80b-a3b --dir .\models
 ```
 
-O download é verificado por SHA-256. Depois, para usar a página web com contexto reduzido a 8.192 tokens, por padrão em CPU-only:
+O download é verificado por SHA-256. Depois, para usar a página web com o 80B (por padrão em CPU-only):
 
 ```powershell
-.\scripts\run-chat-web.ps1 -Model qwen3-next-80b-a3b -Context 8192
+.\scripts\run-chat-web.ps1 -Model qwen3-next-80b-a3b-q
 ```
 
-Para selecionar a RTX 5070, passe o switch `-Gpu` (equivalente a `-Gpu:$true`); `-Gpu:$false` força CPU-only:
+No `run-chat-web.ps1` o nome do 80B termina em `-q` de propósito: ele seleciona o arquivo do modelo (`qwen3-next-80b-a3b-q4km.jns`) e não o bloco de predição MTP que fica ao lado (`qwen3-next-80b-a3b-mtp-q4k.jns`). O janas-server carrega esse bloco sozinho, o que acelera a geração.
+
+**Os dois modelos grandes foram testados e funcionam neste PC: Qwen3.6-35B-A3B e Qwen3-Next-80B-A3B.** O contexto padrão do `run-chat-web.ps1` é 65.536 tokens; use `-Context 8192` (ou 4096/16384) para reduzi-lo.
+
+Para permitir que o Janas use a RTX 5070, passe o switch `-Gpu` (equivalente a `-Gpu:$true`); `-Gpu:$false` força CPU-only:
 
 ```powershell
-.\scripts\run-chat-web.ps1 -Model qwen3-next-80b-a3b -Context 8192 -Gpu
+.\scripts\run-chat-web.ps1 -Model qwen3-next-80b-a3b-q -Gpu
 ```
 
-O modelo 80B continua maior que a VRAM e roda por streaming, com os especialistas quentes na RAM e operações selecionadas na GPU. A GPU discreta só recebe trabalho se o Janas considerar útil; a velocidade do 80B com a RTX 5070 ainda não foi medida. O script não baixa modelos por conta própria.
+O modelo roda na CPU, na RAM e no SSD: os pesos ficam no NVMe e os especialistas mais usados ficam em cache na RAM. A GPU não carrega o modelo; com `-Gpu` o Janas só a usa nas etapas em que mede ganho, principalmente na leitura do prompt (o "fast prompt", que manda blocos do prompt para a GPU). A geração de cada token continua na CPU. O script não baixa modelos por conta própria.
 
 O chat pula a calibração automática por padrão para começar diretamente; passe `-Tune` para solicitar essa medição explicitamente.
 
@@ -109,14 +113,28 @@ Depois, modelos maiores podem ser selecionados, um por execução:
 .\scripts\run-benchmark.ps1 -Model qwen3-30b-a3b
 ```
 
-Recomendo começar pelo 4B para validar a execução, depois testar o 30B e o 35B. O 80B é um teste de capacidade/streaming pelo NVMe, não uma promessa de maior velocidade. O Janas é experimental; acompanhe o sistema e não comece por uma sessão longa com o PC ocupado.
+O 35B e o 80B já foram validados no chat; o benchmark mede a velocidade de cada um. O 80B lê os especialistas pelo NVMe, então é maior, mas não necessariamente mais lento por token. O Janas é experimental; acompanhe o sistema e não comece por uma sessão longa com o PC ocupado.
 
 ## GPU e limitações
 
-O Janas usa Vulkan, não CUDA, e escolhe por medição quais etapas delegar à GPU. Vulkan reconhecer a RTX 5070 não garante que todos os requisitos específicos do Janas passem. Após instalar, execute o `vkcheck` incluído no pacote, se presente. O suporte desta RTX 5070 não foi validado diretamente nos benchmarks publicados pelo repositório; confirme com o `vkcheck` e `janas-bench` locais.
+O Janas executa o modelo na CPU, com os pesos no SSD e o cache de especialistas na RAM. A GPU é opcional: ele usa Vulkan, não CUDA, e escolhe por medição quais etapas delegar a ela (sobretudo a leitura de prompts). Segundo a documentação do próprio Janas (`bin/janas/docs/hardware.md`), o "fast prompt" ainda não havia sido confirmado em GPUs discretas; se as respostas saírem estranhas com `-Gpu`, `JANAS_GPU_FAST_PROMPT=0` desliga esse caminho. Vulkan reconhecer a RTX 5070 não garante que todos os requisitos específicos do Janas passem. Após instalar, execute o `vkcheck` incluído no pacote, se presente. O suporte desta RTX 5070 não foi validado diretamente nos benchmarks publicados pelo repositório; confirme com o `vkcheck` e `janas-bench` locais.
 
 A primeira etapa é nativa no Windows, sem Docker: reduz variáveis e preserva o caminho direto ao NVMe e ao driver Vulkan. O `vkcheck` passou com o driver NVIDIA 616.92. O primeiro `janas-bench` com GPU terminou sem produzir métricas finais; não use esse relatório como resultado de desempenho. A comparação CPU-only ainda não foi executada.
 
-Para abrir um tunel cloudflared para acesso externo, copie o cloudflared.exe para o diretório raiz do projeto
-digite no terminal, dentro do diretório raiz .\cloudflared.exe tunnel --url http://127.0.0.1:8080
-Mantenha a janela de terminal com o tunel aberta para manter o acesso externo
+## Agente com pesquisa na internet (AgenteV2)
+
+`AgenteV2/` é um agente que conversa com o janas-server e pesquisa na internet quando precisa de informação atual: busca, lê 3 páginas (estáticas e dinâmicas, via Chromium), resume no próprio modelo e responde com as fontes. Tem interface web com o uso de tokens sobre o contexto e acesso externo protegido por token. Instruções em [AgenteV2/README.md](AgenteV2/README.md).
+
+A versão anterior continua em `Agente/` (e na tag git `agente-v1`).
+
+## Acesso externo (cloudflared)
+
+Copie o `cloudflared.exe` para a raiz do projeto e aponte o túnel para o **agente** (porta 8090), que exige token:
+
+```powershell
+.\cloudflared.exe tunnel --url http://127.0.0.1:8090
+```
+
+Mantenha a janela do túnel aberta enquanto quiser o acesso externo.
+
+**Não aponte o túnel para a porta 8080.** O janas-server não pede senha: qualquer pessoa com o endereço `trycloudflare.com` usaria o modelo e a API inteira. Se precisar mesmo expor o servidor, inicie-o com `--api-key`.
