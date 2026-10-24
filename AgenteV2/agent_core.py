@@ -39,7 +39,10 @@ SYSTEM_PROMPT = (
     "depender de informação atual, de algo que pode ter mudado ou de um fato do qual "
     "você não tem certeza; para conversa comum, conhecimento estável ou cálculos, "
     "responda direto, sem pesquisar. Prefira uma pesquisa bem formulada a várias "
-    "pequenas. Não invente URLs nem dados: use só o que a pesquisa trouxe e cite os "
+    "pequenas. Quando o usuário passar um link (URL) e pedir algo sobre ele, use "
+    "fetch_url com esse endereço exato em vez de web_research: a busca não abre "
+    "links específicos. Se fetch_url falhar, informe o erro que ela devolveu. "
+    "Não invente URLs nem dados: use só o que a pesquisa trouxe e cite os "
     "sites. Se a pesquisa não trouxer nada útil, diga isso. Responda no idioma do "
     "usuário, de forma direta."
 )
@@ -64,7 +67,27 @@ TOOLS = [
                 "required": ["query"],
             },
         },
-    }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "fetch_url",
+            "description": (
+                "Abre um endereço específico (página, arquivo do GitHub, texto, JSON) "
+                "e devolve o conteúdo dele. Use quando o usuário fornecer um link."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "url": {
+                        "type": "string",
+                        "description": "O endereço completo, exatamente como o usuário passou, começando com http:// ou https://.",
+                    }
+                },
+                "required": ["url"],
+            },
+        },
+    },
 ]
 
 COMPACT_PROMPT = (
@@ -289,12 +312,18 @@ async def run_turn(s: Session, pergunta: str, emit: Emit) -> None:
                         args = json.loads(chamada["function"]["arguments"] or "{}")
                     except json.JSONDecodeError:
                         args = {}
-                    if chamada["function"]["name"] != "web_research":
-                        conteudo_tool = f"Ferramenta desconhecida: {chamada['function']['name']}"
+                    nome = chamada["function"]["name"]
+                    if nome not in ("web_research", "fetch_url"):
+                        conteudo_tool = f"Ferramenta desconhecida: {nome}"
                     else:
-                        consulta = (args.get("query") or pergunta).strip()
-                        await emit({"type": "tool", "query": consulta})
-                        r = await research.research(consulta, pergunta, emit)
+                        if nome == "fetch_url":
+                            consulta = (args.get("url") or "").strip()
+                            await emit({"type": "tool", "query": consulta, "kind": "url"})
+                            r = await research.fetch_url(consulta, pergunta, emit)
+                        else:
+                            consulta = (args.get("query") or pergunta).strip()
+                            await emit({"type": "tool", "query": consulta, "kind": "busca"})
+                            r = await research.research(consulta, pergunta, emit)
                         s.research.append(r)
                         pesquisas.append(r)
                         if r.usage:

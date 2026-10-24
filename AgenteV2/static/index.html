@@ -362,7 +362,7 @@ async function send(text) {
         const ev = JSON.parse(raw.slice(6));
         switch (ev.type) {
           case 'status': step(esc(ev.text)); break;
-          case 'tool': step('Pesquisando: <strong>' + esc(ev.query) + '</strong>'); break;
+          case 'tool': step((ev.kind === 'url' ? 'Abrindo: ' : 'Pesquisando: ') + '<strong>' + esc(ev.query) + '</strong>'); break;
           case 'page': {
             const s = el('div', 'step', `<span class="ico">↳</span><span>[${ev.n}] <a href="${esc(ev.url)}" target="_blank" rel="noopener noreferrer">${esc(host(ev.url))}</a>${methodBadge(ev.method)} ${fmt(ev.chars)} car. · ${sec(ev.seconds)}</span>`);
             steps.appendChild(s); break;

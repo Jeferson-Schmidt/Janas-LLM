@@ -27,7 +27,8 @@ async def emit(evento: dict) -> None:
     elif tipo == "reasoning":
         print(f"\033[2m{evento['text']}\033[0m", end="", flush=True)
     elif tipo in ("status", "tool"):
-        texto = evento.get("text") or f"Pesquisando: {evento['query']}"
+        acao = "Abrindo" if evento.get("kind") == "url" else "Pesquisando"
+        texto = evento.get("text") or f"{acao}: {evento['query']}"
         print(f"\033[2m  · {texto}\033[0m", flush=True)
     elif tipo == "page":
         print(f"\033[2m    [{evento['n']}] {evento['url']} ({evento['method']}, {_fmt(evento['chars'])} car.)\033[0m")

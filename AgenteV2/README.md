@@ -147,6 +147,16 @@ pergunta → modelo decide → web_research(consulta)
            → modelo responde
 ```
 
+**Links passados pelo usuário** ("resuma https://..."): o modelo usa a ferramenta `fetch_url`, que abre exatamente aquele endereço, sem busca:
+
+- links de arquivo do GitHub (`github.com/.../blob/...`) são trocados pelo arquivo cru (`raw.githubusercontent.com`), que abre direto;
+- texto, markdown, JSON, CSV e YAML entram como estão;
+- páginas montadas por JavaScript vão para o Chromium;
+- o texto entra direto na conversa, sem a chamada de resumo, marcado como conteúdo externo (o modelo é instruído a não seguir ordens escritas nele);
+- acima de `FETCH_URL_MAX_CHARS` (16.000 caracteres, ~4 mil tokens), vão os trechos mais relevantes para a pergunta, completados com o resto do texto, na ordem, até o limite.
+
+Endereços internos continuam bloqueados.
+
 Escolhas de desempenho:
 
 - **A conversa só cresce no fim.** O Qwen3.6 e o Qwen3-Next têm estado recorrente: se uma mensagem antiga muda, o janas-server relê a conversa inteira. Por isso:
@@ -198,6 +208,7 @@ Se a prioridade é velocidade, experimente o modo direto. Também ajudam: reduzi
 | `CHARS_PER_PAGE` | 3000 | caracteres por página enviados ao modelo depois do filtro (~800 tokens) |
 | `SUMMARIZE_PAGES` | True | `False` = modo direto (acima) |
 | `SUMMARY_MAX_TOKENS` | 350 | tamanho máximo do resumo de uma pesquisa |
+| `FETCH_URL_MAX_CHARS` | 16000 | máximo de texto de um link passado pelo usuário (`fetch_url`) que entra na conversa; cada 4 mil tokens levam ~80 s para o modelo ler em CPU |
 | `DYNAMIC_MIN_CHARS` | 800 | abaixo disso, a página é aberta no Chromium |
 | `DYNAMIC_ENABLED` | True | `False` desliga o Chromium (só páginas estáticas) |
 | `ANSWER_MAX_TOKENS` | 1500 | tamanho máximo de uma resposta |

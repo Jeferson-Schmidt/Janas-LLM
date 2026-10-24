@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import ipaddress
+import re
 import socket
 import ssl
 import sys
@@ -74,6 +75,39 @@ async def _check_request(request: httpx.Request) -> None:
 
 
 # --------------------------------------------------------------------------
+# Endereços do GitHub
+# --------------------------------------------------------------------------
+
+_GITHUB_BLOB = re.compile(r"^https?://(?:www\.)?github\.com/([^/]+)/([^/]+)/(?:blob|raw)/(.+?)(?:[?#].*)?$")
+
+
+def normalize_url(url: str) -> str:
+    """
+    Troca links de arquivo do GitHub (github.com/dono/repo/blob/branch/caminho)
+    pelo endereço do arquivo cru em raw.githubusercontent.com. A página
+    github.com/.../blob/... é montada por JavaScript e bloqueia robôs; o
+    arquivo cru é texto puro e abre direto.
+    """
+    url = url.strip().strip("<>\"'")
+    m = _GITHUB_BLOB.match(url)
+    if m:
+        dono, repo, resto = m.groups()
+        return f"https://raw.githubusercontent.com/{dono}/{repo}/{resto}"
+    return url
+
+
+# Respostas que já são texto (arquivo cru, markdown, código, JSON): entram
+# como estão, sem passar pelo trafilatura, que espera HTML.
+_PLAIN_TYPES = ("text/plain", "text/markdown", "text/x-markdown", "application/json",
+                "text/csv", "text/x-python", "application/x-yaml", "text/yaml")
+
+
+def _is_plain(content_type: str) -> bool:
+    tipo = content_type.split(";")[0].strip().lower()
+    return tipo in _PLAIN_TYPES
+
+
+# --------------------------------------------------------------------------
 # Extração de texto
 # --------------------------------------------------------------------------
 
@@ -119,7 +153,7 @@ async def fetch_static(url: str) -> Page:
             if resp.status_code >= 400:
                 return Page(url, error=f"HTTP {resp.status_code}", method="estática")
             tipo = resp.headers.get("content-type", "")
-            if tipo and "html" not in tipo and "text" not in tipo:
+            if tipo and "html" not in tipo and "text" not in tipo and not _is_plain(tipo):
                 return Page(url, error=f"tipo não suportado ({tipo.split(';')[0]})", method="estática")
             partes, total = [], 0
             async for bloco in resp.aiter_bytes():
@@ -131,6 +165,9 @@ async def fetch_static(url: str) -> Page:
     except Exception as exc:
         return Page(url, error=str(exc) or type(exc).__name__, method="estática",
                     seconds=time.perf_counter() - inicio)
+
+    if _is_plain(tipo):
+        return Page(url, text=html.strip(), method="texto", seconds=time.perf_counter() - inicio)
 
     text = await asyncio.to_thread(extract_text, html, url)
     return Page(url, text=text, method="estática", seconds=time.perf_counter() - inicio)

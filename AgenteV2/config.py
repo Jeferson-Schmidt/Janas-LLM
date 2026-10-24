@@ -100,6 +100,11 @@ SUMMARIZE_PAGES = True
 SUMMARY_MAX_TOKENS = 350
 SUMMARY_TEMPERATURE = 0.1
 
+# Ferramenta fetch_url (link passado pelo usuário): o texto do endereço entra
+# direto na conversa, sem resumo. Acima deste tamanho, só os trechos mais
+# relevantes para a pergunta (~4 mil tokens no limite).
+FETCH_URL_MAX_CHARS = 16000
+
 # Páginas já baixadas e pesquisas já resumidas ficam em cache por este tempo.
 CACHE_TTL_SECONDS = 3600
 
