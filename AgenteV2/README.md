@@ -157,6 +157,8 @@ pergunta → modelo decide → web_research(consulta)
 
 Endereços internos continuam bloqueados.
 
+> **Links lentos?** Quase todo o tempo é o modelo lendo o texto do link, não o download (que leva menos de 1 s). Com o padrão de 16.000 caracteres, resumir um README grande levou ~134 s neste PC. Para respostas mais rápidas, reduza `FETCH_URL_MAX_CHARS` em [config.py](config.py): com `8000`, o tempo de leitura cai para mais ou menos a metade. A contrapartida é que, em páginas grandes, o modelo vê menos do texto.
+
 Escolhas de desempenho:
 
 - **A conversa só cresce no fim.** O Qwen3.6 e o Qwen3-Next têm estado recorrente: se uma mensagem antiga muda, o janas-server relê a conversa inteira. Por isso:
@@ -183,6 +185,10 @@ Qwen3.6-35B-A3B num Ryzen 9 7900X com 32 GB de DDR5, NVMe e RTX 5070 (`-Gpu`). S
 | ↳ resumo: ler ~2.600 tokens das páginas | 54 s |
 | ↳ resumo: escrever ~150 tokens | 23 s |
 | ↳ resposta final (983 tokens do cache, 289 novos) | 18 s |
+| Resumir um link passado pelo usuário (`fetch_url`, README de 31 mil caracteres) | ~134 s |
+| ↳ download do arquivo | 0,1 s |
+| ↳ ler ~5.500 tokens (texto do link + conversa) | 96 s |
+| ↳ escrever a resposta (~320 tokens) | 38 s |
 | Compactação automática (uma vez, quando o contexto enche) | ~40 s |
 
 Em CPU, ler o prompt (~50 tokens/s neste PC) e gerar texto (~7-10 tokens/s) custam muito mais que a internet. Por isso o agente filtra as páginas sem LLM antes de mandá-las ao modelo.
@@ -194,7 +200,7 @@ O resumo das páginas economiza **contexto**, mas não **tempo**: o modelo preci
 - `SUMMARIZE_PAGES = True` (padrão): cada pesquisa ocupa ~400 tokens da conversa. Cabem dezenas de pesquisas antes de compactar.
 - `SUMMARIZE_PAGES = False` (modo direto): os trechos filtrados entram direto na conversa, sem a chamada de resumo. A estimativa, feita a partir dos tempos medidos acima, é economizar ~30-40 s por pesquisa, mas cada pesquisa ocupa ~2.500 tokens.
 
-Se a prioridade é velocidade, experimente o modo direto. Também ajudam: reduzir `CHARS_PER_PAGE` (menos texto lido por página) ou `PAGES_PER_SEARCH`.
+Se a prioridade é velocidade, experimente o modo direto. Também ajudam: reduzir `CHARS_PER_PAGE` (menos texto lido por página) ou `PAGES_PER_SEARCH`. Para links passados pelo usuário, reduzir `FETCH_URL_MAX_CHARS` (por exemplo, de 16000 para 8000).
 
 ## Configuração ([config.py](config.py))
 
