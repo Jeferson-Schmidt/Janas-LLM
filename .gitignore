@@ -4,3 +4,5 @@
 !/models/.gitkeep
 /results/*.txt
 !/results/.gitkeep
+/cloudflared.exe
+/Agente/.venv/
