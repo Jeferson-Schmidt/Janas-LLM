@@ -129,6 +129,14 @@ Ele mostra um endereço `https://xxxx.trycloudflare.com`. Abra `https://xxxx.try
 - **Painel lateral** (botão "Tokens" no celular):
   - **Contexto da conversa:** tokens usados sobre o limite (65.535 por padrão), com a marca da compactação automática.
   - **Último turno e Sessão:** tokens lidos agora, reaproveitados do cache do servidor e gerados, além do tempo de leitura e de geração, separados entre a conversa e os resumos de páginas.
+  - **Velocidade (tokens/s), em duas medidas separadas:**
+    - **leitura** (prefill): quantos tokens de prompt o modelo lê por segundo. É o que manda no tempo das pesquisas e dos links;
+    - **geração**: quantos tokens ele escreve por segundo. É o que define a fluidez da resposta.
+
+    Durante a resposta, "Gerando agora" mostra uma estimativa ao vivo (com MTP, um pedaço do stream pode trazer mais de um token). No fim, o valor exato informado pelo servidor substitui a estimativa.
+  - **Desempenho por modelo:** médias de leitura e geração de cada modelo, somando todas as conversas, separadas entre conversa e resumos. Serve para comparar o 35B com o 80B: troque o modelo no janas-server e as medições vão para a linha do modelo novo. Os dados ficam em `AgenteV2\.stats.json` (fora do git), sobrevivem a reinícios do agente e só são zerados pelo botão "Zerar estatísticas" (dois cliques).
+
+  As médias são ponderadas (tokens totais ÷ tempo total). Chamadas pequenas ficam fora delas, porque nelas o custo fixo de cada chamada domina: leituras com menos de `RATE_MIN_READ_TOKENS` (200) e respostas com menos de `RATE_MIN_GEN_TOKENS` (16) tokens. Por isso uma pergunta curta, que lê quase tudo do cache, mostra a leitura como "—". As pesquisas e os links medem bem a leitura, porque leem milhares de tokens.
   - **Memória de pesquisa:** cada pesquisa com o resumo, as fontes e os tempos. Fica separada da conversa: o modelo recebe só o resumo.
 
 Se você fechar a aba no meio de uma resposta, ela continua sendo gerada e aparece no histórico ao reabrir.
@@ -190,6 +198,7 @@ Qwen3.6-35B-A3B num Ryzen 9 7900X com 32 GB de DDR5, NVMe e RTX 5070 (`-Gpu`). S
 | ↳ ler ~5.500 tokens (texto do link + conversa) | 96 s |
 | ↳ escrever a resposta (~320 tokens) | 38 s |
 | Compactação automática (uma vez, quando o contexto enche) | ~40 s |
+| Geração do Qwen3-Next-80B-A3B (resposta de ~280 tokens) | 12,7 tok/s |
 
 Em CPU, ler o prompt (~50 tokens/s neste PC) e gerar texto (~7-10 tokens/s) custam muito mais que a internet. Por isso o agente filtra as páginas sem LLM antes de mandá-las ao modelo.
 
@@ -221,6 +230,9 @@ Se a prioridade é velocidade, experimente o modo direto. Também ajudam: reduzi
 | `TEMPERATURE` | 0.3 | temperatura das respostas |
 | `CACHE_TTL_SECONDS` | 3600 | validade do cache de páginas e pesquisas |
 | `MAX_SESSIONS` | 8 | conversas simultâneas (uma por navegador) |
+| `RATE_MIN_READ_TOKENS` | 200 | leituras menores ficam fora da média de velocidade de leitura |
+| `RATE_MIN_GEN_TOKENS` | 16 | respostas menores ficam fora da média de velocidade de geração |
+| `STATS_FILE` | `.stats.json` | onde fica o desempenho acumulado por modelo |
 
 Variáveis de ambiente, para não editar código:
 

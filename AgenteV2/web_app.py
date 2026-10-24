@@ -28,7 +28,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Resp
 import config
 import scraper
 from agent_core import run_turn, sessions
-from janas_client import main_client
+from janas_client import main_client, model_stats
 
 ACCESS_TOKEN = config.get_access_token()
 AUTH_COOKIE = "janas_agent_auth"
@@ -189,6 +189,12 @@ async def reset(request: Request):
         return JSONResponse({"error": "aguarde a resposta atual terminar ou clique em Parar"}, status_code=409)
     sess.reset()
     return sess.state()
+
+
+@app.post("/api/stats/reset")
+async def stats_reset(request: Request):
+    model_stats.reset()
+    return _sessao(request).state()
 
 
 @app.post("/api/stop")

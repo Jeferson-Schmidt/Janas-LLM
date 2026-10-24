@@ -44,6 +44,11 @@ async def emit(evento: dict) -> None:
                  f"gerados {_fmt(c['completion'])}")
         if r["calls"]:
             linha += f" | resumos {_fmt(r['new_prompt'])}→{_fmt(r['completion'])}"
+        for nome, tok, seg in (("leitura", "rate_read_tokens", "rate_read_seconds"),
+                               ("geração", "rate_gen_tokens", "rate_gen_seconds")):
+            segundos = c[seg] + r[seg]
+            if segundos > 0:
+                linha += f" | {nome} {(c[tok] + r[tok]) / segundos:.1f} tok/s"
         linha += f" | contexto {_fmt(ctx['used'])}/{_fmt(ctx['limit'])}]\033[0m\n"
         print(linha)
 

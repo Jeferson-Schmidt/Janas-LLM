@@ -139,6 +139,12 @@
       <table class="kv" id="totals"></table>
     </section>
     <section>
+      <h2>Desempenho por modelo</h2>
+      <div class="hint" style="margin:-4px 0 10px" id="statsHint"></div>
+      <table class="kv" id="modelStats"></table>
+      <button class="btn" id="statsReset" type="button" style="margin-top:10px">Zerar estatísticas</button>
+    </section>
+    <section>
       <h2>Memória de pesquisa</h2>
       <div class="hint" style="margin:-4px 0 10px">Separada da conversa: o modelo recebe só o resumo.</div>
       <div class="research" id="research"><div class="hint">Nenhuma pesquisa nesta conversa.</div></div>
@@ -150,6 +156,13 @@
 const $ = id => document.getElementById(id);
 const fmt = n => (n || 0).toLocaleString('pt-BR');
 const sec = s => (s || 0).toLocaleString('pt-BR', {maximumFractionDigits: 1}) + ' s';
+// Velocidade em tokens/s; "—" quando não há chamada grande o bastante para medir.
+const rate = (tok, s) => s > 0 && tok > 0 ? (tok / s).toLocaleString('pt-BR', {maximumFractionDigits: 1}) + ' tok/s' : '—';
+// Leitura e geração somando conversa e resumos (média ponderada: tokens totais / tempo total).
+const rates = (...cs) => {
+  const sum = k => cs.reduce((a, c) => a + ((c && c[k]) || 0), 0);
+  return {read: rate(sum('rate_read_tokens'), sum('rate_read_seconds')), gen: rate(sum('rate_gen_tokens'), sum('rate_gen_seconds'))};
+};
 let busy = false, state = null, pollTimer = null;
 
 // ---------------------------------------------------------------- markdown
@@ -246,15 +259,19 @@ function renderPanel() {
   if (state.compactions) hint += ` · compactada ${state.compactions}×`;
   $('ctxHint').textContent = hint;
 
-  const t = state.totals, cv = t.conversa, rs = t.resumos;
+  const t = state.totals, cv = t.conversa, rs = t.resumos, sv = rates(cv, rs);
   $('totals').innerHTML = `
-    <tr><td>Conversa: lidos agora</td><td>${fmt(cv.new_prompt)}</td></tr>
+    <tr><td>Leitura média</td><td>${sv.read}</td></tr>
+    <tr><td>Geração média</td><td>${sv.gen}</td></tr>
+    <tr class="sep"><td>Conversa: lidos agora</td><td>${fmt(cv.new_prompt)}</td></tr>
     <tr><td>Conversa: reaproveitados (cache)</td><td>${fmt(cv.cached)}</td></tr>
     <tr><td>Conversa: gerados</td><td>${fmt(cv.completion)}</td></tr>
     <tr><td>Conversa: tempo leitura / geração</td><td>${sec(cv.input_seconds)} / ${sec(cv.output_seconds)}</td></tr>
     <tr class="sep"><td>Resumos de páginas: lidos</td><td>${fmt(rs.new_prompt)}</td></tr>
     <tr><td>Resumos de páginas: gerados</td><td>${fmt(rs.completion)}</td></tr>
     <tr><td>Resumos: tempo leitura / geração</td><td>${sec(rs.input_seconds)} / ${sec(rs.output_seconds)}</td></tr>`;
+
+  renderModelStats();
 
   const box = $('research');
   if (!state.research.length) { box.innerHTML = '<div class="hint">Nenhuma pesquisa nesta conversa.</div>'; return; }
@@ -274,6 +291,23 @@ function renderPanel() {
     box.appendChild(card);
   }
 }
+function renderModelStats() {
+  const ms = state.model_stats || {models: {}}, names = Object.keys(ms.models || {});
+  const since = ms.since ? new Date(ms.since * 1000).toLocaleDateString('pt-BR') : '';
+  $('statsHint').textContent = `Todas as conversas desde ${since}. Leituras com menos de ${state.rate_min?.read ?? 200} tokens e respostas com menos de ${state.rate_min?.gen ?? 16} ficam fora da média.`;
+  if (!names.length) { $('modelStats').innerHTML = '<tr><td>nenhuma medição ainda</td><td></td></tr>'; return; }
+  $('modelStats').innerHTML = names.map((name, i) => {
+    const m = ms.models[name], all = rates(m.conversa, m.resumos), conv = rates(m.conversa), res = rates(m.resumos);
+    const calls = (m.conversa?.calls || 0) + (m.resumos?.calls || 0);
+    return `
+      <tr${i ? ' class="sep"' : ''}><td colspan="2" style="color:var(--text);font-weight:600;text-align:left">${esc(name)}</td></tr>
+      <tr><td>Leitura média</td><td>${all.read}</td></tr>
+      <tr><td>Geração média</td><td>${all.gen}</td></tr>
+      <tr><td>↳ conversa: leitura / geração</td><td>${conv.read} / ${conv.gen}</td></tr>
+      <tr><td>↳ resumos: leitura / geração</td><td>${res.read} / ${res.gen}</td></tr>
+      <tr><td>Chamadas</td><td>${fmt(calls)}</td></tr>`;
+  }).join('');
+}
 function renderServer(srv) {
   $('dot').className = 'dot ' + (srv?.online ? 'on' : 'off');
   const name = (srv?.model || '').replace(/\\/g, '/').split('/').pop();
@@ -281,9 +315,13 @@ function renderServer(srv) {
   $('server').parentElement.title = srv?.online ? srv.base_url : (srv?.error || '');
 }
 function renderTurn(u) {
-  const c = u.conversa, r = u.resumos;
+  const c = u.conversa, r = u.resumos, tv = rates(c, r);
+  // Sem leitura medida: diz o motivo (quase tudo veio do cache, ou leitura curta).
+  const readNote = tv.read !== '—' ? tv.read : (c.cached > c.new_prompt ? '— (veio do cache)' : '— (leitura curta)');
   let rows = `
-    <tr><td>Tempo total</td><td>${sec(u.seconds)}</td></tr>
+    <tr><td>Leitura</td><td>${readNote}</td></tr>
+    <tr><td>Geração</td><td>${tv.gen}</td></tr>
+    <tr class="sep"><td>Tempo total</td><td>${sec(u.seconds)}</td></tr>
     <tr><td>Chamadas ao modelo</td><td>${c.calls}</td></tr>
     <tr><td>Tokens lidos agora</td><td>${fmt(c.new_prompt)}</td></tr>
     <tr><td>Reaproveitados (cache)</td><td>${fmt(c.cached)}</td></tr>
@@ -346,6 +384,24 @@ async function send(text) {
   scrollDown(true);
   setBusy(true);
 
+  // Velocidade ao vivo: conta os pedaços do stream por segundo. É uma
+  // estimativa (com MTP um pedaço pode trazer mais de um token); o valor
+  // exato do servidor substitui este quando a resposta termina.
+  let phaseStart = performance.now(), genStart = 0, genCount = 0;
+  $('turn').innerHTML = '<tr><td id="liveLabel">Em andamento</td><td id="liveRate">…</td></tr>';
+  const liveTimer = setInterval(() => {
+    const now = performance.now(), label = $('liveLabel'), value = $('liveRate');
+    if (!label) return;
+    if (genStart && now - genStart > 500) {
+      label.textContent = 'Gerando agora (estimado)';
+      value.textContent = '~' + rate(genCount, (now - genStart) / 1000);
+    } else if (!genStart) {
+      label.textContent = 'Aguardando o modelo';
+      value.textContent = sec((now - phaseStart) / 1000);
+    }
+  }, 500);
+  const countGen = () => { if (!genStart) genStart = performance.now(); genCount++; };
+
   try {
     const r = await api('/api/chat', {message: text});
     if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error(j.error || r.statusText); }
@@ -361,7 +417,11 @@ async function send(text) {
         if (!raw.startsWith('data: ')) continue;
         const ev = JSON.parse(raw.slice(6));
         switch (ev.type) {
-          case 'status': step(esc(ev.text)); break;
+          case 'status':
+            step(esc(ev.text));
+            // Nova chamada ao modelo: a medição recomeça (a leitura vem antes do 1º pedaço).
+            if (ev.text.startsWith('Modelo lendo')) { phaseStart = performance.now(); genStart = 0; genCount = 0; }
+            break;
           case 'tool': step((ev.kind === 'url' ? 'Abrindo: ' : 'Pesquisando: ') + '<strong>' + esc(ev.query) + '</strong>'); break;
           case 'page': {
             const s = el('div', 'step', `<span class="ico">↳</span><span>[${ev.n}] <a href="${esc(ev.url)}" target="_blank" rel="noopener noreferrer">${esc(host(ev.url))}</a>${methodBadge(ev.method)} ${fmt(ev.chars)} car. · ${sec(ev.seconds)}</span>`);
@@ -369,12 +429,14 @@ async function send(text) {
           }
           case 'research': sources.push(...(ev.sources || [])); break;
           case 'compacted': $('msgs').insertBefore(el('div', 'notice', 'Contexto compactado automaticamente para liberar espaço.'), bot.previousSibling); break;
-          case 'reasoning': if (!reasoning.parentNode) bot.insertBefore(reasoning, body); reasoning.textContent += ev.text; reasoning.scrollTop = reasoning.scrollHeight; break;
+          case 'reasoning': countGen(); if (!reasoning.parentNode) bot.insertBefore(reasoning, body); reasoning.textContent += ev.text; reasoning.scrollTop = reasoning.scrollHeight; break;
           case 'delta':
             if (!answer) finishSteps();
+            countGen();
             answer += ev.text; body.innerHTML = md(answer); scrollDown(); break;
           case 'error': finishSteps(); body.appendChild(el('div', 'error')).textContent = ev.text; break;
           case 'done':
+            clearInterval(liveTimer);
             finishSteps();
             state = ev.state;
             const last = state.transcript[state.transcript.length - 1];
@@ -390,6 +452,7 @@ async function send(text) {
     finishSteps();
     body.appendChild(el('div', 'error')).textContent = 'Falha: ' + e.message;
   } finally {
+    clearInterval(liveTimer);
     setBusy(false);
     loadState(false);
   }
@@ -411,6 +474,18 @@ $('reset').addEventListener('click', async () => {
   if (busy) return;
   const r = await api('/api/reset', {});
   if (r.ok) { state = {...state, ...(await r.json())}; renderTranscript(); renderPanel(); $('turn').innerHTML = '<tr><td>nenhum ainda</td><td></td></tr>'; }
+});
+$('statsReset').addEventListener('click', async e => {
+  // Sem confirm(): o primeiro clique arma, o segundo (em até 4 s) zera.
+  const b = e.target;
+  if (!b.dataset.armed) {
+    b.dataset.armed = '1'; b.textContent = 'Clique de novo para zerar';
+    setTimeout(() => { delete b.dataset.armed; b.textContent = 'Zerar estatísticas'; }, 4000);
+    return;
+  }
+  delete b.dataset.armed; b.textContent = 'Zerar estatísticas';
+  const r = await api('/api/stats/reset', {});
+  if (r.ok) { state = {...state, ...(await r.json())}; renderPanel(); }
 });
 $('panelBtn').addEventListener('click', () => $('panel').classList.toggle('open'));
 document.addEventListener('click', e => {

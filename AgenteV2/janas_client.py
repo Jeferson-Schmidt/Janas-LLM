@@ -12,6 +12,8 @@ Conexão com o janas-server, que roda em outro terminal (run-chat-web.ps1).
 from __future__ import annotations
 
 import asyncio
+import json
+import time
 from dataclasses import dataclass, field
 
 from openai import AsyncOpenAI
@@ -77,6 +79,81 @@ def parse_usage(usage) -> Usage:
     if not u.context_used:
         u.context_used = u.prompt + u.completion
     return u
+
+
+# --------------------------------------------------------------------------
+# Contadores de tokens e velocidade
+# --------------------------------------------------------------------------
+
+def new_counter() -> dict:
+    return {
+        "new_prompt": 0, "cached": 0, "completion": 0,
+        "input_seconds": 0.0, "output_seconds": 0.0, "calls": 0,
+        # Velocidade: só chamadas grandes o bastante (config.RATE_MIN_*), porque
+        # numa leitura de poucos tokens o custo fixo da chamada domina e a
+        # taxa sai artificialmente baixa.
+        "rate_read_tokens": 0, "rate_read_seconds": 0.0,
+        "rate_gen_tokens": 0, "rate_gen_seconds": 0.0,
+    }
+
+
+def add_usage(contador: dict, uso: dict) -> None:
+    """Soma o uso de uma chamada (Usage.as_dict()) ao contador."""
+    lidos, segundos_leitura = uso.get("new_prompt", 0), uso.get("prompt_seconds", 0)
+    gerados, segundos_geracao = uso.get("completion", 0), uso.get("gen_seconds", 0)
+    contador["new_prompt"] += lidos
+    contador["cached"] += uso.get("cached", 0)
+    contador["completion"] += gerados
+    contador["input_seconds"] = round(contador["input_seconds"] + segundos_leitura, 2)
+    contador["output_seconds"] = round(contador["output_seconds"] + segundos_geracao, 2)
+    contador["calls"] += 1
+    if lidos >= config.RATE_MIN_READ_TOKENS and segundos_leitura > 0:
+        contador["rate_read_tokens"] += lidos
+        contador["rate_read_seconds"] = round(contador["rate_read_seconds"] + segundos_leitura, 2)
+    if gerados >= config.RATE_MIN_GEN_TOKENS and segundos_geracao > 0:
+        contador["rate_gen_tokens"] += gerados
+        contador["rate_gen_seconds"] = round(contador["rate_gen_seconds"] + segundos_geracao, 2)
+
+
+def merge_counter(destino: dict, origem: dict) -> None:
+    for chave, valor in origem.items():
+        destino[chave] = round(destino.get(chave, 0) + valor, 2) if isinstance(valor, float) else destino.get(chave, 0) + valor
+
+
+class ModelStats:
+    """
+    Velocidade acumulada por modelo, somando todas as conversas, para comparar
+    o 35B com o 80B. Fica em .stats.json, então sobrevive a reinícios do
+    agente e só zera pelo botão da interface.
+    """
+
+    def __init__(self, caminho) -> None:
+        self.caminho = caminho
+        self.dados = {"since": time.time(), "models": {}}
+        try:
+            self.dados = json.loads(caminho.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            pass
+
+    def record(self, modelo: str, tipo: str, uso: dict) -> None:
+        if not modelo:
+            return
+        por_modelo = self.dados["models"].setdefault(modelo, {"conversa": new_counter(), "resumos": new_counter()})
+        add_usage(por_modelo.setdefault(tipo, new_counter()), uso)
+        self._save()
+
+    def reset(self) -> None:
+        self.dados = {"since": time.time(), "models": {}}
+        self._save()
+
+    def _save(self) -> None:
+        try:
+            self.caminho.write_text(json.dumps(self.dados), encoding="utf-8")
+        except OSError:
+            pass  # sem disco, as estatísticas continuam valendo até reiniciar
+
+
+model_stats = ModelStats(config.STATS_FILE)
 
 
 def reasoning_body(think: bool) -> dict:

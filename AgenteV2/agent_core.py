@@ -28,7 +28,7 @@ from typing import Awaitable, Callable
 
 import config
 import research
-from janas_client import main_client, parse_usage, reasoning_body
+from janas_client import add_usage, main_client, merge_counter, model_stats, new_counter, parse_usage, reasoning_body
 
 Emit = Callable[[dict], Awaitable[None]]
 
@@ -98,19 +98,6 @@ COMPACT_PROMPT = (
 )
 
 
-def _novo_contador() -> dict:
-    return {"new_prompt": 0, "cached": 0, "completion": 0, "input_seconds": 0.0, "output_seconds": 0.0, "calls": 0}
-
-
-def _somar(contador: dict, uso: dict) -> None:
-    contador["new_prompt"] += uso.get("new_prompt", 0)
-    contador["cached"] += uso.get("cached", 0)
-    contador["completion"] += uso.get("completion", 0)
-    contador["input_seconds"] = round(contador["input_seconds"] + uso.get("prompt_seconds", 0), 2)
-    contador["output_seconds"] = round(contador["output_seconds"] + uso.get("gen_seconds", 0), 2)
-    contador["calls"] += 1
-
-
 @dataclass
 class Session:
     id: str
@@ -120,7 +107,7 @@ class Session:
     research: list[research.ResearchResult] = field(default_factory=list)
     transcript: list[dict] = field(default_factory=list)
     context_used: int = 0
-    totals: dict = field(default_factory=lambda: {"conversa": _novo_contador(), "resumos": _novo_contador()})
+    totals: dict = field(default_factory=lambda: {"conversa": new_counter(), "resumos": new_counter()})
     compactions: int = 0
     busy: bool = False
     cancel: asyncio.Event = field(default_factory=asyncio.Event)
@@ -155,6 +142,8 @@ class Session:
                 "compact_at": config.COMPACT_AT,
             },
             "totals": self.totals,
+            "model_stats": model_stats.dados,
+            "rate_min": {"read": config.RATE_MIN_READ_TOKENS, "gen": config.RATE_MIN_GEN_TOKENS},
             "compactions": self.compactions,
             "model": main_client.display_model,
         }
@@ -218,6 +207,7 @@ async def _stream(s: Session, emit: Emit, permitir_ferramentas: bool):
     if uso_bruto is not None:
         cliente.learn(uso)
         s.context_used = uso.context_used
+        model_stats.record(cliente.display_model, "conversa", uso.as_dict())
     tool_calls = [tool_calls_acc[i] for i in sorted(tool_calls_acc)]
     for n, tc in enumerate(tool_calls):
         tc["id"] = tc["id"] or f"call_{n}"
@@ -240,7 +230,9 @@ async def compact(s: Session, emit: Emit) -> None:
                 extra_body=reasoning_body(False),
             )
         resumo = (resposta.choices[0].message.content or "").strip()
-        _somar(s.totals["conversa"], parse_usage(resposta.usage).as_dict())
+        uso = parse_usage(resposta.usage).as_dict()
+        add_usage(s.totals["conversa"], uso)
+        model_stats.record(cliente.display_model, "conversa", uso)
     except Exception as exc:
         resumo = ""
         await emit({"type": "status", "text": f"Falha ao resumir ({exc}); descartando as mensagens mais antigas."})
@@ -288,7 +280,7 @@ async def run_turn(s: Session, pergunta: str, emit: Emit) -> None:
         tamanho_antes = len(s.messages)
         s.messages.append({"role": "user", "content": pergunta})
         s.transcript.append({"role": "user", "content": pergunta})
-        turno = {"conversa": _novo_contador(), "resumos": _novo_contador()}
+        turno = {"conversa": new_counter(), "resumos": new_counter()}
         pesquisas: list[research.ResearchResult] = []
         resposta = ""
 
@@ -298,7 +290,7 @@ async def run_turn(s: Session, pergunta: str, emit: Emit) -> None:
                 conteudo, tool_calls, uso, interrompido = await _stream(
                     s, emit, permitir_ferramentas=rodada < config.MAX_TOOL_ROUNDS
                 )
-                _somar(turno["conversa"], uso.as_dict())
+                add_usage(turno["conversa"], uso.as_dict())
                 if interrompido or not tool_calls:
                     resposta = conteudo + ("\n\n_(interrompido)_" if interrompido else "")
                     # Mesmo interrompida, a resposta parcial entra no histórico:
@@ -326,8 +318,10 @@ async def run_turn(s: Session, pergunta: str, emit: Emit) -> None:
                             r = await research.research(consulta, pergunta, emit)
                         s.research.append(r)
                         pesquisas.append(r)
-                        if r.usage:
-                            _somar(turno["resumos"], r.usage)
+                        # Pesquisa vinda do cache não chamou o modelo agora:
+                        # somar o uso antigo inflaria tokens e tempos.
+                        if r.usage and not r.from_cache:
+                            add_usage(turno["resumos"], r.usage)
                         await emit({"type": "research", **r.as_dict()})
                         conteudo_tool = r.to_tool_message()
                     s.messages.append({"role": "tool", "tool_call_id": chamada["id"], "content": conteudo_tool})
@@ -344,10 +338,7 @@ async def run_turn(s: Session, pergunta: str, emit: Emit) -> None:
             return
 
         for nome in ("conversa", "resumos"):
-            for chave in ("new_prompt", "cached", "completion", "calls"):
-                s.totals[nome][chave] += turno[nome][chave]
-            for chave in ("input_seconds", "output_seconds"):
-                s.totals[nome][chave] = round(s.totals[nome][chave] + turno[nome][chave], 2)
+            merge_counter(s.totals[nome], turno[nome])
 
         fontes = [{**f, "query": r.query} for r in pesquisas for f in r.sources]
         uso_turno = {**turno, "seconds": round(time.perf_counter() - inicio, 2)}

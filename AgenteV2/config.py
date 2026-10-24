@@ -47,6 +47,15 @@ THINK_DEFAULT = os.environ.get("JANAS_THINK", "off").strip().lower() == "on"
 # Trava de segurança: chamadas de ferramenta seguidas por pergunta.
 MAX_TOOL_ROUNDS = 3
 
+# Velocidade (tokens/s) no painel: chamadas menores que isso ficam fora da
+# média, porque o custo fixo de cada chamada distorce a taxa (17 tokens lidos
+# em 1,6 s dariam "10 tok/s" num modelo que lê a ~50).
+RATE_MIN_READ_TOKENS = 200
+RATE_MIN_GEN_TOKENS = 16
+
+# Velocidade acumulada por modelo (sobrevive a reinícios; zera pela interface).
+STATS_FILE = AGENT_DIR / ".stats.json"
+
 
 # --------------------------------------------------------------------------
 # Conexão com o janas-server (rodando em outro terminal)

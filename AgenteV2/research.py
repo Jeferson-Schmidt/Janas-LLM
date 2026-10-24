@@ -28,7 +28,7 @@ from urllib.parse import urlparse
 
 import config
 import scraper
-from janas_client import parse_usage, reasoning_body, summary_client
+from janas_client import model_stats, parse_usage, reasoning_body, summary_client
 
 try:
     from ddgs import DDGS
@@ -264,6 +264,7 @@ async def _summarize(pergunta: str, consulta: str, paginas: list[dict], emit) ->
         )
     uso = parse_usage(resposta.usage)
     cliente.learn(uso)
+    model_stats.record(cliente.display_model, "resumos", uso.as_dict())
     return (resposta.choices[0].message.content or "").strip(), uso.as_dict()
 
 
