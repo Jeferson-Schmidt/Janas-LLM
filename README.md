@@ -125,6 +125,8 @@ A primeira etapa é nativa no Windows, sem Docker: reduz variáveis e preserva o
 
 `AgenteV2/` é um agente que conversa com o janas-server e pesquisa na internet quando precisa de informação atual: busca, lê 3 páginas (estáticas e dinâmicas, via Chromium), resume no próprio modelo e responde com as fontes. Tem interface web com o uso de tokens sobre o contexto e acesso externo protegido por token. Instruções em [AgenteV2/README.md](AgenteV2/README.md).
 
+Também funciona no VS Code, com o Cline e o modelo local, sem custo: o agente vira um servidor MCP que dá ao Cline as ferramentas de pesquisa e de abrir links (veja "No VS Code, com o Cline" no README do agente).
+
 A versão anterior continua em `Agente/` (e na tag git `agente-v1`).
 
 ## Acesso externo (cloudflared)

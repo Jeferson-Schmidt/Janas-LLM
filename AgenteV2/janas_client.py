@@ -130,14 +130,20 @@ class ModelStats:
     def __init__(self, caminho) -> None:
         self.caminho = caminho
         self.dados = {"since": time.time(), "models": {}}
+        self._load()
+
+    def _load(self) -> None:
         try:
-            self.dados = json.loads(caminho.read_text(encoding="utf-8"))
+            self.dados = json.loads(self.caminho.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             pass
 
     def record(self, modelo: str, tipo: str, uso: dict) -> None:
         if not modelo:
             return
+        # Relê antes de somar: a interface web e o servidor MCP (Cline) são
+        # processos separados gravando o mesmo arquivo.
+        self._load()
         por_modelo = self.dados["models"].setdefault(modelo, {"conversa": new_counter(), "resumos": new_counter()})
         add_usage(por_modelo.setdefault(tipo, new_counter()), uso)
         self._save()

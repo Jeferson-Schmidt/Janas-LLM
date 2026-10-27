@@ -98,6 +98,58 @@ Ele mostra um endereço `https://xxxx.trycloudflare.com`. Abra `https://xxxx.try
 
 > **Não aponte o túnel para a porta 8080.** O janas-server não pede senha: qualquer pessoa com o endereço usaria o modelo e a API inteira. O agente (8090) é que tem o token.
 
+## No VS Code, com o Cline (sem custo)
+
+O [Cline](https://github.com/cline/cline) é uma extensão gratuita e de código aberto que programa dentro do VS Code: lê e edita arquivos mostrando o diff, roda comandos no terminal e pede sua aprovação antes de cada ação. Com ele apontado para o janas-server, **o modelo é o seu, local, e não há custo**. O agente v2 entra como **servidor MCP** ([mcp_server.py](mcp_server.py)), que dá ao Cline as ferramentas `web_research` (pesquisa com 3 páginas e resumo) e `fetch_url` (abrir um link). São o mesmo código e as mesmas proteções da interface web.
+
+```
+VS Code ─ Cline ──(chat)──────────────→ janas-server 127.0.0.1:8080 (seu modelo)
+              └──(MCP, stdio)→ mcp_server.py ─→ internet (busca, páginas, Chromium)
+                                     └──(resumo)→ janas-server
+```
+
+**1. Instale o Cline:** no VS Code, aba Extensões (`Ctrl+Shift+X`), procure **Cline** (autor: saoudrizwan). Ou, no terminal:
+
+```powershell
+code --install-extension saoudrizwan.claude-dev
+```
+
+**2. Gere a configuração** com os caminhos da sua máquina. O script só mostra; não altera nada:
+
+```powershell
+cd AgenteV2
+.\configurar-cline.ps1
+```
+
+**3. Configure o modelo no Cline:** engrenagem do Cline → *API Configuration*, com os valores que o script mostrou:
+
+| Campo | Valor |
+|---|---|
+| API Provider | **OpenAI Compatible** |
+| Base URL | `http://127.0.0.1:8080/v1` |
+| API Key | `local` (qualquer texto) |
+| Model ID | `janas` (qualquer nome: o servidor usa o modelo que carregou) |
+| Context Window | `65536` (o mesmo `-Context` do `run-chat-web.ps1`) |
+
+Não escolha o provedor "Cline" nem faça login: esse provedor usa modelos pagos na nuvem.
+
+**4. Registre o servidor MCP:** no Cline, ícone *MCP Servers* → aba *Installed* → **Configure MCP Servers**. Cole o bloco `janas-pesquisa` que o script mostrou (se já houver outros servidores, acrescente só esse bloco) e salve. O servidor deve aparecer com ponto verde e as duas ferramentas.
+
+O `timeout` de 300 s na configuração é necessário: uma pesquisa leva 1-2 minutos em CPU, e o padrão do Cline (60 s) cortaria antes.
+
+**5. Use**, com o janas-server rodando (o `run-agent-web.ps1` não é necessário, porque o Cline inicia o servidor MCP sozinho):
+
+- "Pesquise qual é a versão mais recente do FastAPI e atualize o requirements.txt"
+- "Leia https://github.com/dono/repo/blob/main/README.md e crie um script de instalação para Windows"
+
+O Cline pede aprovação a cada chamada de ferramenta. Como `web_research` e `fetch_url` só leem a internet (estão marcadas como somente leitura), você pode liberá-las de vez: na lista de ferramentas do servidor, marque *Auto-approve*, ou ponha `"autoApprove": ["web_research", "fetch_url"]` na configuração. Edições de arquivo e comandos continuam pedindo aprovação, conforme as opções do próprio Cline.
+
+**O que esperar de desempenho.** O Cline manda um prompt de sistema grande, com instruções, ferramentas e o estado do projeto, de vários milhares de tokens. Com a leitura a ~50 tok/s medida neste PC, **a primeira mensagem de uma tarefa pode levar alguns minutos** só para o modelo ler esse prompt. Depois, o janas-server guarda o início da conversa em cache (inclusive em disco, entre reinícios) e as mensagens seguintes ficam bem mais rápidas. Esse prompt também ocupa parte dos 65 mil tokens de contexto, então tarefas longas enchem o contexto antes que no chat do agente.
+
+**Resumo ou texto direto?** Por padrão (`JANAS_MCP_SUMMARIZE=on`), o servidor MCP resume as 3 páginas no janas-server e devolve só o resumo, que ocupa pouco contexto do Cline. `.\configurar-cline.ps1 -NoSummarize` gera a configuração com `off`: devolve o texto filtrado, ~1 minuto mais rápido por pesquisa, mas ocupando bem mais contexto.
+
+O mesmo servidor MCP funciona em outros clientes (Continue, Roo Code, Claude Code), com o comando e o argumento que o script mostra.
+
 ## Token de acesso
 
 - **Onde fica no código:** a função `get_access_token()` em [config.py](config.py) decide o token, e o middleware `autenticacao` em [web_app.py](web_app.py) faz a verificação.
@@ -261,4 +313,6 @@ Variáveis de ambiente, para não editar código:
 - **A primeira página dinâmica demora ~7 s:** é o Chromium abrindo. As seguintes reaproveitam o navegador aberto.
 - **Uma pesquisa trouxe fontes fracas:** a busca do ddgs alterna entre mecanismos a cada chamada, e às vezes um deles devolve resultados ruins. Reformular a pergunta, ou pedir explicitamente "pesquise de novo", costuma resolver.
 - **Sites que bloqueiam robôs** (proteção anti-bot, paywall) podem falhar mesmo no Chromium. O agente pula para o próximo resultado.
+- **`pip` falha ao instalar o `mcp` (`InvalidChunkLength` ou "No matching distribution"):** alguns antivírus com inspeção HTTPS (o Avast, por exemplo) cortam a página do PyPI que lista as versões do pacote `mcp`, que é grande. Instale pelo endereço direto do arquivo: pegue a URL do `.whl` em `https://pypi.org/pypi/mcp/json` (campo `urls`) e rode `.venv\Scripts\python.exe -m pip install <URL do .whl>`. As dependências vêm normalmente.
+- **Servidor MCP com ponto vermelho no Cline:** confira se os caminhos do `command` e do `args` existem (rode `configurar-cline.ps1` de novo depois de mover a pasta) e se o `setup-agent.ps1` foi rodado. O erro aparece na lista de servidores do Cline.
 - **Playwright ou Chromium ausente:** o agente continua funcionando só com páginas estáticas e avisa na etapa da página. Rode `setup-agent.ps1` de novo.
