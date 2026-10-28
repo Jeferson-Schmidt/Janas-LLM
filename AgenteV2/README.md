@@ -224,7 +224,7 @@ Outros comportamentos:
 - **A primeira mensagem de cada tarefa é lenta.** O Cline manda um prompt de sistema grande (instruções, ferramentas e o estado do projeto), de vários milhares de tokens. Com a leitura a ~50 tok/s medida neste PC, só lê-lo pode levar alguns minutos.
 - **As mensagens seguintes são bem mais rápidas.** O janas-server guarda o início da conversa em cache (inclusive em disco, entre reinícios).
 - **O contexto enche mais cedo.** Esse prompt ocupa parte dos 65 mil tokens, então tarefas longas enchem o contexto antes que no chat do agente.
-- **Cache de especialistas pequeno deixa tudo lento.** O tamanho aparece na descrição do modelo, no início do janas-server (ex.: "expert cache 1.0 GiB"). Ele é calculado pela RAM livre na partida, então inicie o janas-server com poucos programas abertos. No Qwen3-Next-80B, o autor do Janas mede com 12-16 GiB de cache.
+- **Cache de especialistas pequeno deixa tudo lento.** O tamanho aparece na descrição do modelo, no início do janas-server (ex.: "expert cache 1.0 GiB"). Ele é calculado pela RAM livre na partida, então inicie o janas-server com poucos programas abertos, ou fixe o tamanho com `-Cache` (ex.: `.\scripts\run-chat-web.ps1 -Model qwen3-next-80b-a3b-q -Cache 10`). O script valida o valor contra a memória disponível; veja "Cache de especialistas" no [README principal](../README.md). No Qwen3-Next-80B, o autor do Janas mede com 12-16 GiB de cache.
 
 ## Token de acesso
 

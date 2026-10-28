@@ -85,6 +85,26 @@ Para permitir que o Janas use a RTX 5070, passe o switch `-Gpu` (equivalente a `
 .\scripts\run-chat-web.ps1 -Model qwen3-next-80b-a3b-q -Gpu
 ```
 
+### Cache de especialistas (`-Cache`)
+
+Por padrão, o janas-server escolhe sozinho o tamanho do cache de especialistas, a parte do modelo mantida na RAM, pela memória livre **no momento em que inicia**, deixando 8 GiB (`--reserve 8`) para os outros programas. Com o VS Code, o navegador e o Chromium abertos, ele pode escolher pouco: já foi visto "expert cache 1.0 GiB" no 80B, e então quase todo especialista é lido do SSD a cada token. O tamanho escolhido aparece na descrição do modelo, no início do servidor.
+
+Para fixar o tamanho:
+
+```powershell
+.\scripts\run-chat-web.ps1 -Model qwen3-next-80b-a3b-q -Cache 10
+.\scripts\run-chat-web.ps1 -Cache 12 -DryRun   # só mostra os limites e o comando, sem iniciar
+```
+
+Com `-Cache`, o Janas **não aplica o `--reserve`**, então o script valida o valor antes de iniciar e recusa, com mensagem, o que não couber no menor de dois limites:
+
+- **Teto fixo: 50% da RAM** (15,5 GiB numa máquina de 32 GB). O autor do Janas mede o 80B com 12-16 GiB de cache em 32 GB. Acima disso o ganho é pequeno, porque os especialistas mais usados já cabem, e sobra menos RAM para o cache de arquivos do Windows, que também acelera a leitura do SSD.
+- **Limite do momento: RAM disponível agora menos 6 GiB.** A margem cobre o que o servidor usa além do cache (~4 GiB: pesos fora dos especialistas, estado do contexto, conversas mantidas) e uma folga para os programas abertos crescerem (~2 GiB).
+
+Exemplo: com 16,7 GiB disponíveis, o máximo é 10,6 GiB. Para poder usar mais, feche programas pesados antes de iniciar. Os dois limites (`$CacheMaxFractionOfRam`, `$CacheSafetyMarginGiB`) ficam no início de [scripts/run-chat-web.ps1](scripts/run-chat-web.ps1). Sem `-Cache` (ou com `-Cache 0`), tudo funciona como antes. Valores decimais são aceitos (`-Cache 10.5`, com ponto).
+
+Os limites tornam um travamento muito improvável, mas não impossível: se outro programa crescer muito depois que o servidor iniciou, o Windows passa a usar o arquivo de paginação e tudo fica lento. Nesse caso, reinicie o janas-server com um `-Cache` menor.
+
 O modelo roda na CPU, na RAM e no SSD: os pesos ficam no NVMe e os especialistas mais usados ficam em cache na RAM. A GPU não carrega o modelo; com `-Gpu` o Janas só a usa nas etapas em que mede ganho, principalmente na leitura do prompt (o "fast prompt", que manda blocos do prompt para a GPU). A geração de cada token continua na CPU. O script não baixa modelos por conta própria.
 
 O chat pula a calibração automática por padrão para começar diretamente; passe `-Tune` para solicitar essa medição explicitamente.
