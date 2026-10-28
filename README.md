@@ -1,13 +1,13 @@
 # Janas LLM Hardware Test Bench
 
-Workspace independente para instalar e avaliar o projeto upstream [prabanta-dev/janas](https://github.com/prabanta-dev/janas) neste PC. 
+Workspace independente para instalar e avaliar o projeto upstream [prabanta-dev/janas](https://github.com/prabanta-dev/janas) neste PC.
 
 ## Hardware registrado
 
 - AMD Ryzen 9 7900X, 12 núcleos / 24 threads
 - 32 GB DDR5 (2 x 16 GB), atualmente a 4800 MHz por estabilidade. DDR5-6000 causou travamento; não reative EXPO/6000 sem uma decisão explícita.
 - NVIDIA GeForce RTX 5070, 12 GB de VRAM, driver 616.92; Vulkan enumera a GPU em API 1.4.351
-- NVMe de 4 TB em `D:`; cerca de 599 GB livres no momento da coleta
+- NVMe de 4 TB; cerca de 599 GB livres no momento da coleta
 - Windows 11 Pro, build 26200
 
 ## Estrutura
