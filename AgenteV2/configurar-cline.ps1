@@ -51,8 +51,16 @@ $config = [ordered]@{
 
 Write-Host ''
 Write-Host '=== 1. Servidor MCP (cole no cline_mcp_settings.json) ===' -ForegroundColor Cyan
-Write-Host 'No Cline: icone "MCP Servers" > aba "Installed" > "Configure MCP Servers".'
-Write-Host 'Se o arquivo ja tiver outros servidores, acrescente so o bloco "janas-pesquisa".'
+$settingsFile = Join-Path $env:USERPROFILE '.cline\data\settings\cline_mcp_settings.json'
+$legacyFile = Join-Path $env:APPDATA 'Code\User\globalStorage\saoudrizwan.claude-dev\settings\cline_mcp_settings.json'
+if (-not (Test-Path -LiteralPath $settingsFile) -and (Test-Path -LiteralPath $legacyFile)) {
+    $settingsFile = $legacyFile  # versoes do Cline anteriores a 4.x
+}
+Write-Host "Arquivo: $settingsFile"
+Write-Host "  abrir no VS Code: code `"$settingsFile`""
+Write-Host '  ou no Cline 4.x: botao "Customize" (2o no topo do painel), ou Ctrl+Shift+P > "MCP Servers".'
+Write-Host 'Arquivo vazio ({ "mcpServers": {} }): substitua tudo pelo bloco abaixo.'
+Write-Host 'Se ja tiver outros servidores, acrescente so o bloco "janas-pesquisa" dentro de "mcpServers".'
 Write-Host ''
 $config | ConvertTo-Json -Depth 5
 Write-Host ''

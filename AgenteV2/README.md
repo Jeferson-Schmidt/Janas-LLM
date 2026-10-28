@@ -165,7 +165,21 @@ Em **Model Configuration**:
 
 Para conferir: mande "oi" no Cline. A resposta tem que aparecer no terminal do janas-server como uma requisição.
 
-**5. Registre o servidor MCP:** no Cline, ícone *MCP Servers* → aba *Installed* → **Configure MCP Servers**. Isso abre o `cline_mcp_settings.json`. Cole o bloco `janas-pesquisa` que o script mostrou (se já houver outros servidores, acrescente só esse bloco dentro de `"mcpServers"`) e salve. O servidor deve aparecer com ponto verde e as duas ferramentas.
+**5. Registre o servidor MCP** no arquivo `cline_mcp_settings.json`, onde o Cline guarda os servidores MCP. Ele começa vazio (`{ "mcpServers": {} }`) e fica em:
+
+| Versão do Cline | Caminho do arquivo |
+|---|---|
+| 4.x (testado na 4.1.26) | `%USERPROFILE%\.cline\data\settings\cline_mcp_settings.json` |
+| versões anteriores | `%APPDATA%\Code\User\globalStorage\saoudrizwan.claude-dev\settings\cline_mcp_settings.json` |
+
+Há duas formas de abri-lo:
+
+- **Direto (sempre funciona):** `Ctrl+P` no VS Code, cole o caminho acima e pressione Enter. O VS Code não expande `%USERPROFILE%` nessa busca; troque pelo caminho da sua pasta de usuário, ou, no PowerShell, rode `code "$env:USERPROFILE\.cline\data\settings\cline_mcp_settings.json"`.
+- **Pela interface do Cline:** na 4.x, o topo do painel tem cinco botões: *New Task*, **Customize**, *History*, *Account* e *Settings*. A configuração de MCP fica em **Customize** (o 2º botão). Também dá para usar `Ctrl+Shift+P` → **MCP Servers** (comando do Cline). Em versões anteriores, era um ícone próprio *MCP Servers* → *Installed* → *Configure MCP Servers*.
+
+Cole o bloco `janas-pesquisa` que o `configurar-cline.ps1` mostrou. Se o arquivo estiver vazio, substitua o conteúdo inteiro; se já houver outros servidores, acrescente só o bloco dentro de `"mcpServers"`. Salve com `Ctrl+S`: o Cline vigia o arquivo e inicia o servidor sozinho, sem reiniciar o VS Code.
+
+Na tela de MCP Servers do Cline (Customize ou `Ctrl+Shift+P` → MCP Servers), **janas-pesquisa** deve aparecer com ponto verde e três ferramentas: `web_research`, `fetch_url` e `medir_velocidade`. É ali também que ficam os botões para reiniciar, desligar e aprovar automaticamente cada ferramenta.
 
 Exemplo do que o script gera (os caminhos serão os da sua máquina):
 
@@ -224,7 +238,7 @@ Outros comportamentos:
 - **Mesmas regras do agente:** bloqueio de endereços internos, cache de 1 h, conteúdo de sites marcado como dado e não como instrução. Os valores de [config.py](config.py) (páginas por pesquisa, tamanhos, timeouts) valem aqui também.
 - **Andamento:** cada etapa ("Buscando...", "[1] python.org...") é enviada ao Cline como notificação de progresso.
 - **Estatísticas:** os resumos feitos pelo Cline entram no painel "Desempenho por modelo" da interface web (mesmo `.stats.json`).
-- **Mudanças no código** só valem depois de reiniciar o servidor no Cline: na lista de servidores MCP, botão de reiniciar (*Restart*), ou desligue e ligue o servidor.
+- **Mudanças no código** só valem depois de reiniciar o servidor no Cline: na tela de MCP Servers (Customize, ou `Ctrl+Shift+P` → MCP Servers), botão de reiniciar ao lado de **janas-pesquisa**, ou desligue e ligue o servidor. Também funciona salvar de novo o `cline_mcp_settings.json`. Não é preciso fechar o VS Code nem o janas-server.
 - **Teste sem o Cline:** `.\.venv\Scripts\python.exe mcp_server.py` deve ficar parado, esperando mensagens na entrada. É o comportamento certo de um servidor stdio; encerre com Ctrl+C.
 - **Outros clientes:** o mesmo servidor funciona no Continue, no Roo Code e no Claude Code, com o mesmo `command` e `args`.
 
@@ -399,6 +413,7 @@ Variáveis de ambiente, para não editar código:
 - **Uma pesquisa trouxe fontes fracas:** a busca do ddgs alterna entre mecanismos a cada chamada, e às vezes um deles devolve resultados ruins. Reformular a pergunta, ou pedir explicitamente "pesquise de novo", costuma resolver.
 - **Sites que bloqueiam robôs** (proteção anti-bot, paywall) podem falhar mesmo no Chromium. O agente pula para o próximo resultado.
 - **`pip` falha ao instalar o `mcp` (`InvalidChunkLength` ou "No matching distribution"):** alguns antivírus com inspeção HTTPS (o Avast, por exemplo) cortam a página do PyPI que lista as versões do pacote `mcp`, que é grande. Instale pelo endereço direto do arquivo: pegue a URL do `.whl` em `https://pypi.org/pypi/mcp/json` (campo `urls`) e rode `.venv\Scripts\python.exe -m pip install <URL do .whl>`. As dependências vêm normalmente.
+- **`janas-pesquisa` não aparece no Cline:** o servidor não foi registrado. Abra o `cline_mcp_settings.json` (caminhos no passo 5 da seção do Cline). Se ele contiver só `{ "mcpServers": {} }`, cole o bloco do `configurar-cline.ps1` e salve.
 - **Servidor MCP com ponto vermelho no Cline:** confira se os caminhos do `command` e do `args` existem (rode `configurar-cline.ps1` de novo depois de mover a pasta) e se o `setup-agent.ps1` foi rodado. O erro aparece na lista de servidores do Cline.
 - **Cline: erro 400 "only text parts are supported":** *Supports Images* está marcado e o Cline mandou uma imagem (por exemplo, uma captura de tela). Desmarque nas configurações do modelo.
 - **Cline: a ferramenta falha com "timeout" depois de 60 s:** falta `"timeout": 300` no bloco do servidor no `cline_mcp_settings.json` (ou o valor de *Network Timeout* na lista de servidores MCP).
