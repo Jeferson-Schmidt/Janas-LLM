@@ -201,6 +201,7 @@ Exemplo do que o script gera (os caminhos serão os da sua máquina):
 | Ferramenta | Parâmetros | O que faz |
 |---|---|---|
 | `web_research` | `query` (consulta de busca), `pergunta` (opcional: a pergunta do usuário, usada para escolher e resumir o que importa) | busca, lê as 3 páginas mais relevantes (estáticas ou com JavaScript, pelo Chromium), filtra os trechos e devolve um resumo com as fontes. Leva 1-2 minutos em CPU. |
+| `medir_velocidade` | `prompt`, `execucoes` (1-5, padrão 3), `max_tokens` (32-512, padrão 256), `ampliar_leitura` (padrão desligado) | mede a velocidade do modelo carregado: **mínimo e máximo** de leitura (prompt) e de escrita (geração, em janelas de 1 s), mais o tempo até o 1º token. Envia o `prompt` ao janas-server `execucoes` vezes, cada uma com um identificador único para não medir o cache. Mostra também a configuração do servidor (cache de especialistas, GPU). Só é usada quando você pede explicitamente, por exemplo: "teste a velocidade em tokens por segundo usando este prompt, máximo e mínimo de leitura e escrita". Leva 1-2 minutos. |
 | `fetch_url` | `url`, `pergunta` (opcional) | abre exatamente aquele endereço. Links de arquivo do GitHub viram o arquivo cru; páginas grandes são reduzidas aos trechos mais relevantes (`FETCH_URL_MAX_CHARS`). Leva menos de 1 s para baixar. |
 
 Variáveis de ambiente (no `"env"` da configuração):
@@ -209,6 +210,14 @@ Variáveis de ambiente (no `"env"` da configuração):
 |---|---|---|
 | `JANAS_BASE_URL` | `http://127.0.0.1:8080/v1` | janas-server usado para os resumos |
 | `JANAS_MCP_SUMMARIZE` | `on` | `on`: resume as 3 páginas no janas-server e devolve só o resumo (ocupa pouco contexto do Cline). `off`: devolve o texto filtrado, sem a chamada de resumo; ~1 minuto mais rápido por pesquisa, mas ocupando bem mais contexto. `.\configurar-cline.ps1 -NoSummarize` gera a configuração com `off`. |
+
+Sobre o `medir_velocidade`:
+
+- **Ele não mede a resposta do Cline enquanto ela é gerada.** Quando o modelo chama uma ferramenta, a geração dele para até a ferramenta terminar. Por isso a medição é controlada: a ferramenta envia o seu prompt ao modelo e cronometra.
+- **Prompt curto mede mal a leitura.** Com menos de 200 tokens, o custo fixo de cada chamada domina e a taxa sai abaixo da real (num teste: ~23 tok/s com o prompt de ~100 tokens, contra 55,7 tok/s com `ampliar_leitura`). Peça "com leitura ampliada" para repetir o texto até ~1.024 tokens, como o `janas-bench` faz.
+- **Escrita com mínimo 0:** houve pelo menos 1 s sem tokens, uma pausa real na geração. É comum logo depois de reiniciar o servidor, enquanto o cache de especialistas ainda enche ("experts loading in the background" na configuração). A ferramenta avisa nos dois casos.
+- **Não ponha no `autoApprove`:** cada medição ocupa o modelo por 1-2 minutos e pode tirar a conversa do Cline do cache do servidor (cada execução é uma conversa nova, e o `--keep 8` guarda só 8).
+- **Ótima para comparar valores de `-Cache`:** a configuração do servidor aparece no topo do resultado. Para medidas de referência, continue usando o `janas-bench`.
 
 Outros comportamentos:
 
