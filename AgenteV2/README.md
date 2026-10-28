@@ -102,11 +102,23 @@ Ele mostra um endereço `https://xxxx.trycloudflare.com`. Abra `https://xxxx.try
 
 O [Cline](https://github.com/cline/cline) é uma extensão gratuita e de código aberto que programa dentro do VS Code: lê e edita arquivos mostrando o diff, roda comandos no terminal e pede sua aprovação antes de cada ação. Com ele apontado para o janas-server, **o modelo é o seu, local, e não há custo**. O agente v2 entra como **servidor MCP** ([mcp_server.py](mcp_server.py)), que dá ao Cline as ferramentas `web_research` (pesquisa com 3 páginas e resumo) e `fetch_url` (abrir um link). São o mesmo código e as mesmas proteções da interface web.
 
+### Como as peças se ligam (e por que a Base URL é a 8080)
+
 ```
-VS Code ─ Cline ──(chat)──────────────→ janas-server 127.0.0.1:8080 (seu modelo)
-              └──(MCP, stdio)→ mcp_server.py ─→ internet (busca, páginas, Chromium)
-                                     └──(resumo)→ janas-server
+            ┌── Base URL (porta 8080) ───→ janas-server   ← o modelo, que pensa e escreve o código
+Cline ──────┤
+            └── MCP (stdio, sem porta) ──→ mcp_server.py  ← as ferramentas de internet
+                                              ├→ internet (busca, páginas, Chromium)
+                                              └→ janas-server :8080 (resumo das páginas)
+
+Navegador ──→ :8090 interface web do agente ──→ janas-server :8080   (independente do Cline)
 ```
+
+- **A Base URL do Cline é a 8080** (janas-server), não a 8090. O Cline precisa de uma API de modelo no padrão da OpenAI, e é isso que o janas-server oferece. A 8090 é a interface web do agente para pessoas: tem rotas próprias, pede token e já tem o próprio laço de ferramentas.
+- **O servidor MCP não usa porta.** O Cline inicia o `mcp_server.py` como processo filho e conversa com ele pela entrada e saída padrão (stdio). Por isso o `run-agent-web.ps1` não é necessário para o Cline; ele pode ficar rodando ao mesmo tempo, para uso pelo navegador.
+- **Para usar o Cline, só o janas-server precisa estar no ar** (Terminal 1).
+
+### Passo a passo
 
 **1. Instale o Cline:** no VS Code, aba Extensões (`Ctrl+Shift+X`), procure **Cline** (autor: saoudrizwan). Ou, no terminal:
 
@@ -121,34 +133,98 @@ cd AgenteV2
 .\configurar-cline.ps1
 ```
 
-**3. Configure o modelo no Cline:** engrenagem do Cline → *API Configuration*, com os valores que o script mostrou:
+**3. Na tela de boas-vindas ("How will you use Cline?"), escolha "Bring my own API key"** ("Use Cline with your provider of choice") e clique em *Continue*.
 
-| Campo | Valor |
-|---|---|
-| API Provider | **OpenAI Compatible** |
-| Base URL | `http://127.0.0.1:8080/v1` |
-| API Key | `local` (qualquer texto) |
-| Model ID | `janas` (qualquer nome: o servidor usa o modelo que carregou) |
-| Context Window | `65536` (o mesmo `-Context` do `run-chat-web.ps1`) |
+As outras opções usam modelos **na nuvem**, com login e, em alguns casos, cobrança:
+- **"Absolutely Free":** modelos gratuitos na nuvem. O seu código sai do PC.
+- **"ClinePass":** assinatura paga.
+- **"Frontier Model":** Claude, GPT e outros modelos pagos.
 
-Não escolha o provedor "Cline" nem faça login: esse provedor usa modelos pagos na nuvem.
+Se já passou dessa tela, a mesma configuração fica na engrenagem do Cline → *API Configuration*.
 
-**4. Registre o servidor MCP:** no Cline, ícone *MCP Servers* → aba *Installed* → **Configure MCP Servers**. Cole o bloco `janas-pesquisa` que o script mostrou (se já houver outros servidores, acrescente só esse bloco) e salve. O servidor deve aparecer com ponto verde e as duas ferramentas.
+**4. Configure o provedor e o modelo:**
 
-O `timeout` de 300 s na configuração é necessário: uma pesquisa leva 1-2 minutos em CPU, e o padrão do Cline (60 s) cortaria antes.
+| Campo | Valor | Observação |
+|---|---|---|
+| API Provider | **OpenAI Compatible** | não use "Ollama" nem "LM Studio", que são outros servidores |
+| Base URL | `http://127.0.0.1:8080/v1` | o janas-server |
+| API Key | `local` | qualquer texto; só importa se o janas-server foi iniciado com `--api-key` |
+| Model ID | `janas` | qualquer nome: o servidor usa o modelo que carregou |
+| Custom Headers | nenhum | se clicar em "Add header" sem querer, remova a linha (ícone de lixeira) ou deixe os campos vazios |
 
-**5. Use**, com o janas-server rodando (o `run-agent-web.ps1` não é necessário, porque o Cline inicia o servidor MCP sozinho):
+Em **Model Configuration**:
+
+| Campo | Valor | Por quê |
+|---|---|---|
+| Context Window | `65536` | o mesmo `-Context` do `run-chat-web.ps1` |
+| Max Output Tokens | `8192` | o Cline às vezes reescreve arquivos inteiros; um limite baixo corta a edição no meio |
+| Temperature | `0.3` | edições e chamadas de ferramenta mais consistentes. Se o modelo entrar em repetição (a mesma linha em loop), suba para 0.5-0.7; a Qwen recomenda 0.7 para conversa e desaconselha 0 |
+| Supports Images | **desmarcado** | o janas-server só aceita texto e responde 400 a imagens (*"only text parts are supported"*). O Qwen3-Next-80B-A3B-Instruct também é só de texto |
+| Input / Output Price | `0` | o modelo é local; assim o contador de custo do Cline mostra US$ 0,00 |
+| Reasoning / thinking | desligado, se aparecer | os modelos *Instruct* não têm modo de raciocínio |
+
+Para conferir: mande "oi" no Cline. A resposta tem que aparecer no terminal do janas-server como uma requisição.
+
+**5. Registre o servidor MCP:** no Cline, ícone *MCP Servers* → aba *Installed* → **Configure MCP Servers**. Isso abre o `cline_mcp_settings.json`. Cole o bloco `janas-pesquisa` que o script mostrou (se já houver outros servidores, acrescente só esse bloco dentro de `"mcpServers"`) e salve. O servidor deve aparecer com ponto verde e as duas ferramentas.
+
+Exemplo do que o script gera (os caminhos serão os da sua máquina):
+
+```json
+{
+  "mcpServers": {
+    "janas-pesquisa": {
+      "command": "D:\\Janas LLM\\AgenteV2\\.venv\\Scripts\\python.exe",
+      "args": ["D:\\Janas LLM\\AgenteV2\\mcp_server.py"],
+      "env": {
+        "JANAS_BASE_URL": "http://127.0.0.1:8080/v1",
+        "JANAS_MCP_SUMMARIZE": "on"
+      },
+      "disabled": false,
+      "timeout": 300,
+      "autoApprove": []
+    }
+  }
+}
+```
+
+- `command`: o Python do venv do agente. Use esse, e não o do sistema, porque é ele que tem as dependências e o Chromium.
+- `timeout: 300`: uma pesquisa leva 1-2 minutos em CPU, e o padrão do Cline (60 s) cortaria antes.
+- `autoApprove`: vazio = o Cline pede aprovação a cada chamada. Como as duas ferramentas só leem a internet (são marcadas como somente leitura), você pode liberá-las: `"autoApprove": ["web_research", "fetch_url"]`, ou marque *Auto-approve* na lista de ferramentas do servidor. Edições de arquivo e comandos continuam pedindo aprovação, conforme as opções do próprio Cline.
+
+**6. Use**, com o janas-server rodando:
 
 - "Pesquise qual é a versão mais recente do FastAPI e atualize o requirements.txt"
 - "Leia https://github.com/dono/repo/blob/main/README.md e crie um script de instalação para Windows"
 
-O Cline pede aprovação a cada chamada de ferramenta. Como `web_research` e `fetch_url` só leem a internet (estão marcadas como somente leitura), você pode liberá-las de vez: na lista de ferramentas do servidor, marque *Auto-approve*, ou ponha `"autoApprove": ["web_research", "fetch_url"]` na configuração. Edições de arquivo e comandos continuam pedindo aprovação, conforme as opções do próprio Cline.
+### O servidor MCP ([mcp_server.py](mcp_server.py))
 
-**O que esperar de desempenho.** O Cline manda um prompt de sistema grande, com instruções, ferramentas e o estado do projeto, de vários milhares de tokens. Com a leitura a ~50 tok/s medida neste PC, **a primeira mensagem de uma tarefa pode levar alguns minutos** só para o modelo ler esse prompt. Depois, o janas-server guarda o início da conversa em cache (inclusive em disco, entre reinícios) e as mensagens seguintes ficam bem mais rápidas. Esse prompt também ocupa parte dos 65 mil tokens de contexto, então tarefas longas enchem o contexto antes que no chat do agente.
+| Ferramenta | Parâmetros | O que faz |
+|---|---|---|
+| `web_research` | `query` (consulta de busca), `pergunta` (opcional: a pergunta do usuário, usada para escolher e resumir o que importa) | busca, lê as 3 páginas mais relevantes (estáticas ou com JavaScript, pelo Chromium), filtra os trechos e devolve um resumo com as fontes. Leva 1-2 minutos em CPU. |
+| `fetch_url` | `url`, `pergunta` (opcional) | abre exatamente aquele endereço. Links de arquivo do GitHub viram o arquivo cru; páginas grandes são reduzidas aos trechos mais relevantes (`FETCH_URL_MAX_CHARS`). Leva menos de 1 s para baixar. |
 
-**Resumo ou texto direto?** Por padrão (`JANAS_MCP_SUMMARIZE=on`), o servidor MCP resume as 3 páginas no janas-server e devolve só o resumo, que ocupa pouco contexto do Cline. `.\configurar-cline.ps1 -NoSummarize` gera a configuração com `off`: devolve o texto filtrado, ~1 minuto mais rápido por pesquisa, mas ocupando bem mais contexto.
+Variáveis de ambiente (no `"env"` da configuração):
 
-O mesmo servidor MCP funciona em outros clientes (Continue, Roo Code, Claude Code), com o comando e o argumento que o script mostra.
+| Variável | Padrão | Uso |
+|---|---|---|
+| `JANAS_BASE_URL` | `http://127.0.0.1:8080/v1` | janas-server usado para os resumos |
+| `JANAS_MCP_SUMMARIZE` | `on` | `on`: resume as 3 páginas no janas-server e devolve só o resumo (ocupa pouco contexto do Cline). `off`: devolve o texto filtrado, sem a chamada de resumo; ~1 minuto mais rápido por pesquisa, mas ocupando bem mais contexto. `.\configurar-cline.ps1 -NoSummarize` gera a configuração com `off`. |
+
+Outros comportamentos:
+
+- **Mesmas regras do agente:** bloqueio de endereços internos, cache de 1 h, conteúdo de sites marcado como dado e não como instrução. Os valores de [config.py](config.py) (páginas por pesquisa, tamanhos, timeouts) valem aqui também.
+- **Andamento:** cada etapa ("Buscando...", "[1] python.org...") é enviada ao Cline como notificação de progresso.
+- **Estatísticas:** os resumos feitos pelo Cline entram no painel "Desempenho por modelo" da interface web (mesmo `.stats.json`).
+- **Mudanças no código** só valem depois de reiniciar o servidor no Cline: na lista de servidores MCP, botão de reiniciar (*Restart*), ou desligue e ligue o servidor.
+- **Teste sem o Cline:** `.\.venv\Scripts\python.exe mcp_server.py` deve ficar parado, esperando mensagens na entrada. É o comportamento certo de um servidor stdio; encerre com Ctrl+C.
+- **Outros clientes:** o mesmo servidor funciona no Continue, no Roo Code e no Claude Code, com o mesmo `command` e `args`.
+
+### O que esperar de desempenho
+
+- **A primeira mensagem de cada tarefa é lenta.** O Cline manda um prompt de sistema grande (instruções, ferramentas e o estado do projeto), de vários milhares de tokens. Com a leitura a ~50 tok/s medida neste PC, só lê-lo pode levar alguns minutos.
+- **As mensagens seguintes são bem mais rápidas.** O janas-server guarda o início da conversa em cache (inclusive em disco, entre reinícios).
+- **O contexto enche mais cedo.** Esse prompt ocupa parte dos 65 mil tokens, então tarefas longas enchem o contexto antes que no chat do agente.
+- **Cache de especialistas pequeno deixa tudo lento.** O tamanho aparece na descrição do modelo, no início do janas-server (ex.: "expert cache 1.0 GiB"). Ele é calculado pela RAM livre na partida, então inicie o janas-server com poucos programas abertos. No Qwen3-Next-80B, o autor do Janas mede com 12-16 GiB de cache.
 
 ## Token de acesso
 
@@ -315,4 +391,8 @@ Variáveis de ambiente, para não editar código:
 - **Sites que bloqueiam robôs** (proteção anti-bot, paywall) podem falhar mesmo no Chromium. O agente pula para o próximo resultado.
 - **`pip` falha ao instalar o `mcp` (`InvalidChunkLength` ou "No matching distribution"):** alguns antivírus com inspeção HTTPS (o Avast, por exemplo) cortam a página do PyPI que lista as versões do pacote `mcp`, que é grande. Instale pelo endereço direto do arquivo: pegue a URL do `.whl` em `https://pypi.org/pypi/mcp/json` (campo `urls`) e rode `.venv\Scripts\python.exe -m pip install <URL do .whl>`. As dependências vêm normalmente.
 - **Servidor MCP com ponto vermelho no Cline:** confira se os caminhos do `command` e do `args` existem (rode `configurar-cline.ps1` de novo depois de mover a pasta) e se o `setup-agent.ps1` foi rodado. O erro aparece na lista de servidores do Cline.
+- **Cline: erro 400 "only text parts are supported":** *Supports Images* está marcado e o Cline mandou uma imagem (por exemplo, uma captura de tela). Desmarque nas configurações do modelo.
+- **Cline: a ferramenta falha com "timeout" depois de 60 s:** falta `"timeout": 300` no bloco do servidor no `cline_mcp_settings.json` (ou o valor de *Network Timeout* na lista de servidores MCP).
+- **Cline: o modelo repete a mesma linha ou o mesmo trecho em loop:** suba a *Temperature* para 0.5-0.7.
+- **Cline: nenhuma resposta, ou erro de conexão:** o janas-server não está rodando, ainda está carregando o modelo, ou a Base URL está errada. Ela é `http://127.0.0.1:8080/v1`, com `/v1` no fim, e não a 8090.
 - **Playwright ou Chromium ausente:** o agente continua funcionando só com páginas estáticas e avisa na etapa da página. Rode `setup-agent.ps1` de novo.
