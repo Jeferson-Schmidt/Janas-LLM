@@ -1,8 +1,8 @@
 param(
     [ValidateSet('qwen3.6-35b-a3b', 'qwen3-next-80b-a3b-q')]
     [string]$Model = 'qwen3.6-35b-a3b',
-    [ValidateSet(4096, 8192, 16384, 65536)]
-    [int]$Context = 65536,
+    [ValidateSet(4096, 8192, 16384, 65536, 200000)]
+    [int]$Context = 200000,
     [switch]$Gpu,
     # Memoria (GiB) para o cache de especialistas do Janas. 0 (padrao) =
     # automatico, como antes: o Janas escolhe o tamanho e deixa --reserve 8 GiB
@@ -70,7 +70,7 @@ if ($Cache -gt 0) {
     $limit = Get-CacheLimit
     $details = ('RAM total {0:N1} GiB; disponivel agora {1:N1} GiB. Limite fixo: {2:P0} da RAM = {3:N1} GiB. ' +
         'Limite agora: disponivel - {4} GiB de margem = {5:N1} GiB.') -f
-        $limit.TotalGiB, $limit.AvailableGiB, $CacheMaxFractionOfRam, $limit.FixedCapGiB, $CacheSafetyMarginGiB, $limit.NowCapGiB
+    $limit.TotalGiB, $limit.AvailableGiB, $CacheMaxFractionOfRam, $limit.FixedCapGiB, $CacheSafetyMarginGiB, $limit.NowCapGiB
 
     if ($Cache -lt $CacheMinGiB) {
         throw "-Cache $Cache GiB e pequeno demais (minimo $CacheMinGiB GiB). Omita -Cache para o modo automatico."
