@@ -75,5 +75,5 @@ Ficam em `D:\Janas LLM\models`, o mesmo valor de `JANAS_MODELS`.
 ## Rede
 
 - O Avast inspeciona HTTPS. O `janas-get` e o pip falham quando um site não está nas exceções.
-- Exceções em uso: `https://huggingface.co/*`, `https://us.aws.cdn.hf.co/*` e `https://pypi.org/*`.
+- Exceções em uso: `https://huggingface.co/*` e `https://pypi.org/*`.
 - Se um download der erro de certificado, veja primeiro se o host é novo. Não desligue a verificação TLS.

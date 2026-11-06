@@ -20,7 +20,7 @@ Ambiente restaurado depois da perda de arquivos de 31/10. Os dois modelos e o Ag
 - [x] `AgenteV2/.venv` recriado, com Chromium.
 - [x] AgenteV2 testado pelo terminal: pergunta simples e pesquisa na web.
 - [x] `run-chat-web.ps1` grava a saída do servidor em `logs/`.
-- [x] Exceções do Avast para `huggingface.co`, `us.aws.cdn.hf.co` e `pypi.org`.
+- [x] Exceções do Avast para `huggingface.co` e `pypi.org`.
 
 ## Falta fazer
 
