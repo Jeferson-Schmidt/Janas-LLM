@@ -17,6 +17,8 @@ Workspace independente para instalar e avaliar o projeto upstream [prabanta-dev/
 - `models/`: modelos; mantidos no NVMe D:
 - `results/`: relatórios do `janas-bench`
 - `scripts/`: instalação, diagnóstico e benchmark
+- `spec.md`: o que já foi feito e o que falta neste projeto
+- `infra.md`: planejamento de infraestrutura e regras de segurança
 
 Os diretórios de modelos e resultados são criados/ignorados localmente; pesos e relatórios não devem ser adicionados ao controle de versão.
 
@@ -148,6 +150,58 @@ A primeira etapa é nativa no Windows, sem Docker: reduz variáveis e preserva o
 Também funciona no VS Code, com o Cline e o modelo local, sem custo: o agente vira um servidor MCP que dá ao Cline as ferramentas de pesquisa e de abrir links (veja "No VS Code, com o Cline" no README do agente).
 
 A versão anterior continua em `Agente/` (e na tag git `agente-v1`).
+
+## Trabalhando em projetos com o modelo local
+
+Quando o contexto enche, o modelo perde o que estava fazendo e pode errar feio. Em 31/10/2026, o 80B perdeu o contexto no meio de um trabalho e rodou uma deleção geral no diretório errado, o que apagou modelos, ambientes virtuais e outros arquivos deste repositório. Um contexto maior ajuda, mas não resolve. Para qualquer projeto feito com o modelo, siga as três práticas abaixo.
+
+### 1. Divida o trabalho em etapas
+
+Peça uma parte do projeto por vez, em vez de "faça o sistema inteiro". Cada prompt deve ter:
+
+- uma única tarefa, com o resultado esperado;
+- os arquivos ou a pasta em que o modelo pode mexer;
+- como conferir que a etapa terminou.
+
+Ao concluir uma etapa, comece uma tarefa nova no Cline. Assim, cada etapa parte de um contexto limpo, e a memória do projeto fica nos arquivos abaixo.
+
+### 2. Mantenha um `spec.md`
+
+Fica na raiz do projeto e registra o que já foi feito e o que falta. Se o contexto se perder, a próxima ação retoma de onde parou. Deve conter:
+
+- objetivo do projeto;
+- onde o trabalho parou e qual é a próxima etapa;
+- lista de feito e de falta fazer;
+- decisões tomadas e decisões em aberto.
+
+O modelo atualiza esse arquivo ao terminar cada etapa, não só no fim do projeto.
+
+### 3. Mantenha um `infra.md` em cada projeto
+
+Fica na raiz e descreve toda a infraestrutura planejada, para o modelo avaliar qualquer mudança sem depender do que lembra da conversa. Deve conter:
+
+- regras de segurança: o que nunca apagar e o que exige confirmação;
+- pastas, serviços, portas e como iniciar cada um;
+- dependências, versões e configurações;
+- o que está no git e como recuperar o que não está.
+
+Este repositório tem os dois arquivos como exemplo: [spec.md](spec.md) e [infra.md](infra.md).
+
+### Prompt de início de etapa
+
+Use algo assim no começo de cada tarefa:
+
+```text
+Leia spec.md e infra.md antes de qualquer ação.
+Faça somente esta etapa: <tarefa>.
+Mexa apenas em: <pasta ou arquivos>.
+Terminou quando: <como conferir>.
+Não rode deleção recursiva sem me pedir confirmação.
+Se não souber em que pasta ou etapa está, pare e pergunte.
+Ao terminar, atualize o spec.md.
+```
+
+Para não precisar repetir, coloque essas regras no arquivo `.clinerules` na raiz do projeto, que o Cline lê em toda tarefa. Essas instruções reduzem o risco, mas o modelo ainda pode ignorá-las. A proteção real é deixar desligada a aprovação automática de comandos no Cline.
 
 ## Acesso externo (cloudflared)
 
