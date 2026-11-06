@@ -10,3 +10,4 @@
 /AgenteV2/.token
 /AgenteV2/.stats.json
 __pycache__/
+/logs/

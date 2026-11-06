@@ -1,8 +1,11 @@
 param(
     [ValidateSet('qwen3.6-35b-a3b', 'qwen3-next-80b-a3b-q')]
     [string]$Model = 'qwen3.6-35b-a3b',
+    # O KV cache do contexto inteiro e alocado na partida: no modo automatico,
+    # um valor maior tira memoria do cache de especialistas.
+    # O AgenteV2 usa no maximo 65535 (config.CONTEXT_WINDOW).
     [ValidateSet(4096, 8192, 16384, 65536, 200000)]
-    [int]$Context = 200000,
+    [int]$Context = 65536,
     [switch]$Gpu,
     # Memoria (GiB) para o cache de especialistas do Janas. 0 (padrao) =
     # automatico, como antes: o Janas escolhe o tamanho e deixa --reserve 8 GiB
@@ -117,9 +120,37 @@ try {
         return
     }
 
-    & $serverExecutable @serverArguments
-    if ($LASTEXITCODE -ne 0) {
-        throw "janas-server terminou com codigo $LASTEXITCODE."
+    # A saida do servidor aparece aqui e tambem fica em logs/, para que o motivo
+    # de um encerramento inesperado nao se perca junto com a janela.
+    $logDirectory = Join-Path $projectRoot 'logs'
+    New-Item -ItemType Directory -Force -Path $logDirectory | Out-Null
+    $logFile = Join-Path $logDirectory ('janas-server-{0:yyyyMMdd-HHmmss}.log' -f (Get-Date))
+    Write-Host "Log do servidor: $logFile"
+    $log = New-Object IO.StreamWriter($logFile, $false, (New-Object Text.UTF8Encoding($false)))
+    $log.AutoFlush = $true
+    $log.WriteLine("Inicio: $(Get-Date -Format s). Comando: $serverExecutable $($serverArguments -join ' ')")
+
+    # Com 'Stop', cada linha do stderr de um executavel nativo redirecionada
+    # com 2>&1 viraria um erro que encerra o script no PowerShell 5.1.
+    $ErrorActionPreference = 'Continue'
+    try {
+        & $serverExecutable @serverArguments 2>&1 | ForEach-Object {
+            $line = "$_"
+            Write-Host $line
+            $log.WriteLine($line)
+        }
+        $exitCode = $LASTEXITCODE
+    }
+    finally {
+        $ErrorActionPreference = 'Stop'
+        $os = Get-CimInstance Win32_OperatingSystem
+        $log.WriteLine(('Fim: {0:s}. Codigo de saida: {1}. RAM livre {2:N1} GiB; commit livre {3:N1} de {4:N1} GiB.' -f
+            (Get-Date), $exitCode, ($os.FreePhysicalMemory / 1MB), ($os.FreeVirtualMemory / 1MB), ($os.TotalVirtualMemorySize / 1MB)))
+        $log.Dispose()
+    }
+
+    if ($exitCode -ne 0) {
+        throw "janas-server terminou com codigo $exitCode. Detalhes em $logFile."
     }
 }
 finally {
